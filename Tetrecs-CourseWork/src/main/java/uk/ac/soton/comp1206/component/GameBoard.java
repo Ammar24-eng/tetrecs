@@ -1,0 +1,237 @@
+package uk.ac.soton.comp1206.component;
+
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.GridPane;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import uk.ac.soton.comp1206.event.BlockClickedListener;
+import uk.ac.soton.comp1206.game.Grid;
+
+import java.util.Set;
+
+/**
+ * A GameBoard is a visual component to represent the visual GameBoard.
+ * It extends a GridPane to hold a grid of GameBlocks.
+ *
+ * The GameBoard can hold an internal grid of it's own, for example, for displaying an upcoming block. It also be
+ * linked to an external grid, for the main game board.
+ *
+ * The GameBoard is only a visual representation and should not contain game logic or model logic in it, which should
+ * take place in the Grid.
+ */
+public class GameBoard extends GridPane {
+
+    private static final Logger logger = LogManager.getLogger(GameBoard.class);
+
+    /**
+     * Number of columns in the board
+     */
+    private final int cols;
+
+    /**
+     * Number of rows in the board
+     */
+    private final int rows;
+
+    /**
+     * The visual width of the board - has to be specified due to being a Canvas
+     */
+    private final double width;
+
+    /**
+     * The visual height of the board - has to be specified due to being a Canvas
+     */
+    private final double height;
+
+    /**
+     * The grid this GameBoard represents
+     */
+    final Grid grid;
+
+    /**
+     * The blocks inside the grid
+     */
+    GameBlock[][] blocks;
+
+    /**
+     * The listener to call when a specific block is clicked
+     */
+    private BlockClickedListener blockClickedListener;
+
+    public Boolean mouseMode;
+
+    public GameBlock currentBlock;
+    private Boolean pieceBoardBool = false;
+
+
+    /**
+     * Create a new GameBoard, based off a given grid, with a visual width and height.
+     * @param grid linked grid
+     * @param width the visual width
+     * @param height the visual height
+     */
+    public GameBoard(Grid grid, double width, double height) {
+        this.cols = grid.getCols();
+        this.rows = grid.getRows();
+        this.width = width;
+        this.height = height;
+        this.grid = grid;
+        this.getStyleClass().add("gameBox");
+        mouseMode = true;
+
+        //Build the GameBoard
+        build();
+    }
+
+    /**
+     * Create a new GameBoard with it's own internal grid, specifying the number of columns and rows, along with the
+     * visual width and height.
+     *
+     * @param cols number of columns for internal grid
+     * @param rows number of rows for internal grid
+     * @param width the visual width
+     * @param height the visual height
+     */
+    public GameBoard(int cols, int rows, double width, double height) {
+        this.cols = cols;
+        this.rows = rows;
+        this.width = width;
+        this.height = height;
+        this.grid = new Grid(cols,rows);
+        currentBlock = getBlock(0,0);
+
+        //Build the GameBoard
+        build();
+    }
+
+
+    /**
+     * Get a specific block from the GameBoard, specified by it's row and column
+     * @param x column
+     * @param y row
+     * @return game block at the given column and row
+     */
+    public GameBlock getBlock(int x, int y) {
+        return blocks[x][y];
+    }
+
+    /**
+     * Build the GameBoard by creating a block at every x and y column and row
+     */
+    protected void build() {
+        logger.info("Building grid: {} x {}",cols,rows);
+
+        setMaxWidth(width);
+        setMaxHeight(height);
+
+        setGridLinesVisible(true);
+
+        blocks = new GameBlock[cols][rows];
+
+        for(var y = 0; y < rows; y++) {
+            for (var x = 0; x < cols; x++) {
+                createBlock(x,y);
+            }
+        }
+    }
+
+    /**
+     * Create a block at the given x and y position in the GameBoard
+     * @param x column
+     * @param y row
+     * @return returns the block
+     */
+    protected GameBlock createBlock(int x, int y) {
+        var blockWidth = width / cols;
+        var blockHeight = height / rows;
+
+        //Create a new GameBlock UI component
+        GameBlock block = new GameBlock(this, x, y, blockWidth, blockHeight);
+
+        //Add to the GridPane
+        add(block,x,y);
+
+        //Add to block directory
+        blocks[x][y] = block;
+
+        //Connect the GameBlock component to its corresponding value in the Grid
+        block.bind(grid.getGridProperty(x,y));
+
+        //Attach a mouse click handler to the block to activate the GameBoard's blockClicked method
+        block.setOnMouseClicked((e) -> {if(e.getButton()== MouseButton.PRIMARY){
+            block.setPlacepoint();
+            blockClicked(e, block);
+        }
+        });
+
+        block.setOnMouseEntered((e) -> {if(!isPieceboard()){
+            currentBlock = block;
+            mouseEnterBlock(block);
+        }});
+        block.setOnMouseExited((e) ->{if(!isPieceboard()){
+            mouseExitBlock(block);
+        }});
+
+
+        return block;
+    }
+
+    /**
+     * Set the listener to handle an event when a block is clicked
+     * @param listener listener to add
+     */
+    public void setOnBlockClick(BlockClickedListener listener) {
+        this.blockClickedListener = listener;
+    }
+
+    /**
+     * Triggered when a block is clicked. Call the attached listener.
+     * @param event mouse event
+     * @param block block clicked on
+     */
+    private void blockClicked(MouseEvent event, GameBlock block) {
+        logger.info("Block clicked: {}", block);
+
+        if(blockClickedListener != null) {
+            blockClickedListener.blockClicked(block);
+        }
+    }
+    /**
+     * Checks if the gameboard is a pieceboard (for hovering effects)
+     * @return returns the bool value
+     */
+    public Boolean isPieceboard(){
+        return pieceBoardBool;
+    }
+    /**
+     * initiates hoverblock only if its a gameboard and not a pieceblock
+     * @param block to hover
+     */
+
+    public void mouseEnterBlock(GameBlock block){
+        if(!isPieceboard()){
+            block.hoverBlock();
+        }
+    }
+    /**
+     * returns block back to normal when called
+     * @param block block to stop hovering
+     */
+    public void mouseExitBlock(GameBlock block){
+        if(!isPieceboard()){
+            block.paint();
+        }
+    }
+    /**
+     * calls the fading animation for each block ina given set of coordinates
+     * @param coords set of coords for blocks that need to be faded out
+     */
+    public void fadeOut(Set<GameBlockCoordinate> coords){
+        for(GameBlockCoordinate coord: coords){
+            getBlock(coord.getX(), coord.getY()).fadeOut();
+        }
+    }
+
+
+}
